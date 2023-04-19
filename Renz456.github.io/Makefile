@@ -89,6 +89,8 @@ tracegen-ct.o: COPT = -O3
 trans-fin.o: COPT = -O3 -fno-unroll-loops
 trans-fin.o: CFLAGS += -DNDEBUG
 
+$(LINK) -nostartfiles -g ...
+
 # Also put trans.c through some custom checks.
 trans-check.bc: trans.ll ct/Check.so
 	$(LLVM_PATH)opt -load=ct/Check.so -Check -o $@ $<
