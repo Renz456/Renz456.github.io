@@ -250,6 +250,7 @@ void printSummary(const csim_stats_t *stats);
 
 // taken from write up
 int process_trace_file(const char *trace) {
+    return true;
     FILE *tfp = fopen(trace, "rt");
     if (!tfp) {
         printf("Error opening '%s'", trace);
@@ -452,6 +453,7 @@ processor_t ** initialise_cpu(unsigned int p, unsigned long e, unsigned long s){
     
     for (unsigned int i = 0; i < p; i++){
         processors[i]->cache = malloc(e * (0x1L << s) * sizeof(cacheline_t));
+        
         processors[i]->myid=i;
         processors[i]->done = false;
         processors[i]->count = 0;
@@ -528,12 +530,12 @@ int main(int argc, char **argv) {
 
     if (process_trace_file(t))
         perror("invalid instruction\n");
-
-    cacheline_t*cache = malloc(e * (0x1L << s) * sizeof(cacheline_t));
-    if (!cache) {
-        perror("cache array alloc failed!");
-        return -1;
-    }
+    
+    // cacheline_t*cache = malloc(e * (0x1L << s) * sizeof(cacheline_t));
+    // if (!cache) {
+    //     perror("cache array alloc failed!");
+    //     return -1;
+    // }
 
     // for (unsigned long i = 0; i < e * (0x1L << s); i++) {
     //     cache[i] = calloc(sizeof(unsigned long), 4);
@@ -545,10 +547,15 @@ int main(int argc, char **argv) {
     //     }
     // }
 
-    unsigned int p = 4;
+    unsigned int p = 1;
     
     processor_t ** processors = initialise_cpu(p, e, s);
-    char** traces = NULL;
+    printf("hi\n");
+    char** traces = malloc(sizeof(char)*100*p);
+    
+    strcpy(traces[0], "traces/csim/yi.trace");
+
+    
     csim_stats_t* final_stats = MultiCoreCacheSim(p, s, e, b, v, processors, traces);
 
 
