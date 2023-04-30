@@ -27,25 +27,6 @@
 // hit, intialize and evict to simulate a cache in memory
 
 
-// From write up
-// typedef struct {
-//     unsigned long hits;            /* number of hits */
-//     unsigned long cold_misses;          /* number of misses */
-//     unsigned long conflict_misses;
-//     unsigned long true_sharing_misses;
-//     unsigned long false_sharing_misses;
-//     unsigned long upgrades;
-
-//     unsigned long evictions;       /* number of evictions */
-//     unsigned long dirty_bytes;     /* number of dirty bytes in cache
-//        at end of simulation */
-//     unsigned long dirty_evictions; /* number of bytes evicted
-//    from dirty lines */
-// } csim_stats_t;
-
-
-
-
 
 
 cacheline_t* init_cache(unsigned long s, unsigned long e){
@@ -104,13 +85,12 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
             char linebuff[100];
             bool read = true;
             
-            
             if (!processors[j].done && fgets(linebuff, 38, processors[j].tfp)){
-                if (linebuff[0] == 'w' || linebuff[0] == 'S') read = false;
+                
+                if (linebuff[0] == 'w') read = false;
                 
                 char adress_string[64] = "";
                 int check = 5;               // Starting index of address in linebuff
-                
                 
                 while (linebuff[check] != ',') {
 
@@ -129,13 +109,11 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                 unsigned long set = (address >> b) & mask1;
                 
                 
-
                 bool did_hit = false;
 
                 cacheline_t* cache = processors[j].cache;
                 // rest of the cache can behave like csim, maybe no need for flush?
-                
-                            
+
                 // bus upgrade bus req
                 for (unsigned long i = 0; i < e; i++) {
                     if (cache[set * e + i].isValid &&
@@ -150,20 +128,20 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                             if (read) request->curr_req.request = BUS_READ;
                             else request->curr_req.request = BUS_READ_X;  
                             push_bus_queue(bus_queue, request);
-                            // if (cache[set * e + i].address==address) final_stats->true_sharing_misses += 1;
+                            // if (cache[set * e + i].address == address) final_stats->true_sharing_misses += 1;
                             // else final_stats->false_sharing_misses+=1;
-                            // printf("push? %d\n", j);
-                            
 
                         }
                         else{
                             final_stats->hits += 1;
+                            // silently upgrade to modify state if line is exclusive
+                            if (!read && cache[set * e + i].state == EXCLUSIVE) cache[set * e + i].state = MODIFY;
                         }
                         did_hit = true;
                         break;
                     }
                 }
-                
+
                 // miss case bus req
                 if (!did_hit){  
                     node_t* request = malloc(sizeof(node_t));
@@ -172,30 +150,26 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     request->curr_req.processor_id = j;
                     if (read) request->curr_req.request = BUS_READ;
                     else request->curr_req.request = BUS_READ_X;  
-                    // printf("hello\n");
                     push_bus_queue(bus_queue, request);
-                    // printf("push? 2 %d\n", j);
+                    
                             
                 }
-                
-                
-                
 
-                    
+                
                 
 
 
             
             } else processors[j].done = true;
-
         }
         
         while(bus_queue->head != NULL){
             node_t* current_request = pop_bus_queue(bus_queue);
-            
+
             unsigned int processor = current_request->curr_req.processor_id;
             unsigned long address = current_request->curr_req.address;
             bus_request_t req_type = current_request->curr_req.request;
+
             unsigned long mask1 = ~((~(unsigned long)0x0L) << s);    
             unsigned long set = (address >> b) & mask1;
 
@@ -204,14 +178,15 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             cacheline_t* cache = processors[processor].cache;
 
+
             // update relvant cachelines in processors
+            bool sharing = false;
+            
             final_stats->communication_cost += p;
-            // bool sharing = false;
+
             for (unsigned long i = 0; i < p; i++){
                 if (i == processor) continue;
                 cacheline_t* other_cache = processors[i].cache;
-                // printf("check processor: %d, updates: %lu\n", processor, i);
-                                
                 for (unsigned long k = 0; k < e; k++){
                     if (other_cache[set * e + k].isValid &&
                         other_cache[set * e + k].address >> b == address>>b){
@@ -222,7 +197,8 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                                 other_cache[set * e + k].state = INVALID; 
                             }
                             other_cache[set * e + k].dirty = false;
-                            // sharing = true; // check if this needed?
+                            sharing = true; // check if this needed?
+                        
                         }
                 }
             }
@@ -252,7 +228,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                         final_stats->dirty_bytes += 1;
                         final_stats->upgrades+=1;
                         cache[set * e + i].state = MODIFY;
-
+                
                     
                     }
                     
@@ -264,7 +240,6 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     // cache[set*e + i][3] = 1;   removed this as it's redundant
                 }
             }
-            
 
             //cold miss
             if (!did_hit) {
@@ -278,8 +253,10 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                             cache[set * e + i].dirty = true;
                             cache[set * e + i].state = MODIFY;
                         } else{
+                            if (sharing) cache[set * e + i].state = SHARED;
+                            else cache[set * e + i].state = EXCLUSIVE;
+
                             cache[set * e + i].dirty = false;
-                            cache[set * e + i].state = SHARED;
                         }
 
                         cache[set * e + i].LRU_count = processors[processor].count;
@@ -315,7 +292,10 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     cache[lo_ind].dirty = true;
                     final_stats->dirty_bytes += 1;
                     cache[lo_ind].state = MODIFY;
-                } else cache[lo_ind].state= SHARED;
+                } else {
+                    if (sharing) cache[lo_ind].state= SHARED;
+                    else cache[lo_ind].state= EXCLUSIVE;
+                }
                 cache[lo_ind].LRU_count = processors[processor].count;
                 final_stats->evictions += 1;
                 final_stats->conflict_misses += 1;
@@ -323,14 +303,13 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             processors[processor].count += 1;
 
-            // pop_bus_queue(bus_queue);
-
             free(current_request);
 
         }
+        
         global_clock += 1;
     }
-    
+        
     
     
     printf("global_clock %d\n", global_clock);

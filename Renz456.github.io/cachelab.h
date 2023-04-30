@@ -9,10 +9,25 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+typedef struct {
+    bool dirty;
+    unsigned int* processors;
+    unsigned long address;
+    bool valid;
+} directory_cacheline_t;
+
+typedef struct {
+    directory_cacheline_t* cachelines;
+} directory_t;
+
+
+
+
 typedef enum{
     MODIFY = 0,
     SHARED, 
     INVALID,
+    EXCLUSIVE,
     STATE_LEN 
 }   state_t;
 
@@ -46,7 +61,7 @@ typedef struct cacheline{
 } cacheline_t;
 
 typedef struct processor {
-    cacheline_t **cache;
+    cacheline_t *cache;
     unsigned int myid;
     // maybe add a current request?
     FILE* tfp;
@@ -54,7 +69,20 @@ typedef struct processor {
     unsigned long count;
 } processor_t;
 
+typedef struct node {
+    bus_interconnect curr_req;
+    struct node* next;
+} node_t;
 
+typedef struct {
+    node_t* head;
+    node_t* tail;
+    unsigned int size;
+} queue_t;
+
+node_t* pop_bus_queue(queue_t* bus);
+
+void push_bus_queue(queue_t* bus, node_t* new);
 /**
  * @brief Struct representing simulation statistics for a trace
  */
@@ -65,7 +93,7 @@ typedef struct {
     unsigned long true_sharing_misses;
     unsigned long false_sharing_misses;
     unsigned long upgrades;
-
+    unsigned long communication_cost;
     unsigned long evictions;       /* number of evictions */
     unsigned long dirty_bytes;     /* number of dirty bytes in cache
        at end of simulation */
@@ -150,5 +178,6 @@ void correctTrans(size_t M, size_t N, double A[N][M], double B[M][N]);
 void registerTransFunction(void (*trans)(size_t M, size_t N, double[N][M],
                                          double[M][N], double *),
                            const char *desc);
+
 
 #endif /* CACHELAB_TOOLS_H */

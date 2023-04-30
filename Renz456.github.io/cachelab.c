@@ -14,6 +14,28 @@
 trans_func_t func_list[MAX_TRANS_FUNCS];
 int func_counter = 0;
 
+node_t* pop_bus_queue(queue_t* bus){
+    if (bus==NULL) return NULL;
+    node_t* currentNode = bus->head;
+    bus->head = bus->head->next;
+    bus->size -= 1;
+    return currentNode;
+}
+
+void push_bus_queue(queue_t* bus, node_t* new){
+    bus->size += 1;
+    if (bus->head == NULL){
+        bus->tail = new;
+        bus->head = new;
+        new->next = NULL;
+        return;
+    }
+    bus->tail->next = new;
+    bus->tail = new;
+    return;
+}
+
+
 /**
  * @brief Store a summary of the cache simulation statistics.
  *
@@ -24,9 +46,9 @@ int func_counter = 0;
  */
 void printSummary(const csim_stats_t *stats) {
     printf("hits:%ld cold misses:%ld conflict misses: %ld true_sharing misses: %ld false_sharing_misses: %ld \n"
-            "evictions:%ld dirty_bytes_in_cache:%ld dirty_bytes_evicted:%ld \n",
+            "evictions:%ld dirty_bytes_in_cache:%ld dirty_bytes_evicted:%ld communication cost: %ld\n",
            stats->hits, stats->cold_misses, stats->conflict_misses, stats->true_sharing_misses, stats->false_sharing_misses, stats->evictions, 
-           stats->dirty_bytes, stats->dirty_evictions);
+           stats->dirty_bytes, stats->dirty_evictions, stats->communication_cost);
 
     FILE *output_fp = fopen(".csim_results", "w");
     if (output_fp == NULL) {
