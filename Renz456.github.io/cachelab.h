@@ -101,6 +101,9 @@ typedef struct {
    from dirty lines */
 } csim_stats_t;
 
+/* intitialise csim stats */
+csim_stats_t* initStats(void);
+
 /** @brief Store a summary of the cache simulation statistics. */
 void printSummary(const csim_stats_t *stats);
 

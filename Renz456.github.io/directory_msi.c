@@ -48,25 +48,12 @@ directory_t* init_directory(unsigned long s, unsigned long e,  unsigned long p){
     directory_t* directory = malloc(sizeof(directory));
 
     directory->cachelines = calloc((0x1L << s)*e*p, sizeof(directory_cacheline_t));
-    for (unsigned long i = 0; i < (0x1L << s)*e*p; i++) directory->cachelines->processors = calloc(sizeof(unsigned int), p);
+    for (unsigned long i = 0; i < (0x1L << s)*e*p; i++) directory->cachelines[i].processors = calloc(sizeof(unsigned int), p);
     return directory;
 }
 // TODO helpers
 // void sendBusReq();
 
-csim_stats_t* initStats(void) {
-    csim_stats_t* final_stats = malloc(sizeof(csim_stats_t));
-    final_stats->cold_misses=0;
-    final_stats->upgrades=0;
-    final_stats->conflict_misses=0;
-    final_stats->dirty_bytes=0;
-    final_stats->dirty_evictions=0;
-    final_stats->evictions=0;
-    final_stats->false_sharing_misses=0;
-    final_stats->hits=0;
-    final_stats->true_sharing_misses=0;
-    return final_stats;
-}
 
 // function to check if all processors have finished their respective traces or not
 bool check_processors(processor_t* processors, unsigned int p){
@@ -129,6 +116,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
     queue_t* bus_queue = malloc(sizeof(queue_t));
 
+    int global_clock = 0;
     
     while(!check_processors(processors, p)){
 
@@ -143,12 +131,14 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                 char adress_string[64] = "";
                 int check = 5;               // Starting index of address in linebuff
                 
+                // printf("mm\n");/ 
                 while (linebuff[check] != ',') {
 
                     strncat(adress_string, &linebuff[check], 1);
                     check += 1;
 
                 }
+                
                 const char *constant = adress_string;
 
                 // printf("%s check this\n", adress_string);
@@ -161,8 +151,9 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                 
                 bool did_hit = false;
 
+                
                 cacheline_t* cache = processors[j].cache;
-
+                
                 for (unsigned long i = 0; i < e; i++) {
                     if (cache[set * e + i].isValid &&
                         cache[set * e + i].address >> b == address >> b) {
@@ -199,12 +190,16 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     else request->curr_req.request = BUS_READ_X;  
                     push_bus_queue(bus_queue, request);
                 }
+                
 
             }
         else processors[j].done = true;
         }
         
+        // printf("clear req %d\n", bus_queue->size);
+        
         while(bus_queue->head != NULL){
+            // printf("check clock %d\n", global_clock);
             node_t* current_request = pop_bus_queue(bus_queue);
 
             unsigned int processor = current_request->curr_req.processor_id;
@@ -222,6 +217,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
             // check directory
             unsigned long insert_mem = mem_size;
             unsigned long found_mem = mem_size;
+            
             for(unsigned int i = 0; i < mem_size; i++){
                 if (directory->cachelines[i].valid && 
                     directory->cachelines[i].address>>b == address >> b){
@@ -231,6 +227,8 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                 if (!directory->cachelines[i].valid && insert_mem==mem_size) insert_mem = i;
                 
             }
+                
+            
             // memory already exits, update any lines that are sharing 
             if (found_mem < mem_size){
                 //
@@ -241,6 +239,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                             if (directory->cachelines[found_mem].processors[i] == 1){
                                 update_processor(processors[i], address, SHARED, b, s, e);
                                 sharing = true;
+                                final_stats->communication_cost += 1;
                             }
                         }
                         
@@ -254,6 +253,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                         if (directory->cachelines[found_mem].processors[i] == 1){
                             update_processor(processors[i], address, INVALID, b, s, e);
                             directory->cachelines[found_mem].processors[i] = 0;
+                            final_stats->communication_cost += 1;
                         }
                     }
                     directory->cachelines[found_mem].dirty = true;
@@ -262,12 +262,18 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             }
             else if (insert_mem < mem_size) {
+                
                 directory->cachelines[insert_mem].valid = true;
+                
                 if (!read) directory->cachelines[insert_mem].dirty = true;
                 else directory->cachelines[insert_mem].dirty = false;
-                directory->cachelines[insert_mem].address = address;
-                directory->cachelines[insert_mem].processors[processor] = 1;
                 
+                directory->cachelines[insert_mem].address = address;
+                // printf("seg boi %d %lu %lu %u\n", global_clock, insert_mem, found_mem, directory->cachelines[insert_mem].processors[processor]);
+                directory->cachelines[insert_mem].processors[processor] = 1;
+                // printf("post seg\n");
+                
+            
             }
             // need new memory case
             else{
@@ -275,6 +281,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     if (directory->cachelines[last_mem_pop].processors[i] == 1){
                         update_processor(processors[i], directory->cachelines[last_mem_pop].address, INVALID, b, s, e);
                         directory->cachelines[last_mem_pop].processors[i] = 0;
+                        final_stats->communication_cost += 1;
                     }
                 }
                 directory->cachelines[last_mem_pop].address = address;
@@ -284,9 +291,10 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             }
             
+            // printf("seg?\n");
             
             cacheline_t* cache = processors[processor].cache;
-                
+            
             // upgrade miss
             for (unsigned long i = 0; i < e; i++) {
                 if (cache[set * e + i].isValid &&
@@ -352,7 +360,8 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                     }
                 }
             }
-
+            
+            
             // Eviction Case
             if (!did_hit) {
                 // To check LRU line, find line w the lowest count
@@ -397,12 +406,13 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             if(sharing) processors[processor].count += 0;
             
-        
-        }
-        
             
+        }
+        // printf("post req %d\n", bus_queue->size);
+        global_clock += 1;   
 
     }
+    printf("global clock %d\n", global_clock);
     free(directory->cachelines);
     free(directory);
     free(bus_queue);
@@ -577,16 +587,16 @@ int main(int argc, char **argv) {
     // char traces[4][100] = {"traces/csim/ocean1.trace", "traces/csim/ocean2.trace", "traces/csim/ocean3.trace", "traces/csim/ocean4.trace"};
     // char traces[4][100] = {"traces/csim/yi3.trace", "traces/csim/yi2.trace", "traces/csim/yi.trace", "traces/csim/yi4.trace"};
     // char traces[4][100] = {"traces/traces/true_share1.trace", "traces/traces/true_share2.trace", "traces/traces/true_share3.trace", "traces/traces/true_share4.trace"};
-    // char traces[4][100] = {"traces/traces/false_sharing1.trace", "traces/traces/false_sharing2.trace", "traces/traces/false_sharing3.trace", "traces/traces/false_sharing4.trace"};
-    char traces[4][100] = {"traces/traces/test_check1.trace", "traces/traces/test_check2.trace", "traces/traces/test_check3.trace", "traces/traces/test_check4.trace"};
+    char traces[4][100] = {"traces/traces/false_sharing1.trace", "traces/traces/false_sharing2.trace", "traces/traces/false_sharing3.trace", "traces/traces/false_sharing4.trace"};
+    // char traces[4][100] = {"traces/traces/test_check1.trace", "traces/traces/test_check2.trace", "traces/traces/test_check3.trace", "traces/traces/test_check4.trace"};
     
     processor_t * processors = initialise_cpu(p, e, s, traces);
     
-    
+    printf("yo\n");
     
     csim_stats_t* final_stats = MultiCoreCacheSim(p, s, e, b, v, processors);
 
-    
+    // printf("hi?\n");
     final_stats->dirty_bytes = final_stats->dirty_bytes * (0x1L << b);
     final_stats->dirty_evictions = final_stats->dirty_evictions * (0x1L << b);
 

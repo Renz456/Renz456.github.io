@@ -66,20 +66,6 @@ cacheline_t* init_cache(unsigned long s, unsigned long e){
 // TODO helpers
 // void sendBusReq();
 
-csim_stats_t* initStats(void) {
-    csim_stats_t* final_stats = malloc(sizeof(csim_stats_t));
-    final_stats->cold_misses=0;
-    final_stats->upgrades=0;
-    final_stats->conflict_misses=0;
-    final_stats->dirty_bytes=0;
-    final_stats->dirty_evictions=0;
-    final_stats->evictions=0;
-    final_stats->false_sharing_misses=0;
-    final_stats->hits=0;
-    final_stats->true_sharing_misses=0;
-    return final_stats;
-}
-
 // function to check if all processors have finished their respective traces or not
 bool check_processors(processor_t* processors, unsigned int p){
     for (unsigned int i = 0; i < p; i++){

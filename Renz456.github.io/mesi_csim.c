@@ -44,22 +44,8 @@ cacheline_t* init_cache(unsigned long s, unsigned long e){
 
 }
 
-// TODO helpers
-// void sendBusReq();
 
-csim_stats_t* initStats(void) {
-    csim_stats_t* final_stats = malloc(sizeof(csim_stats_t));
-    final_stats->cold_misses=0;
-    final_stats->upgrades=0;
-    final_stats->conflict_misses=0;
-    final_stats->dirty_bytes=0;
-    final_stats->dirty_evictions=0;
-    final_stats->evictions=0;
-    final_stats->false_sharing_misses=0;
-    final_stats->hits=0;
-    final_stats->true_sharing_misses=0;
-    return final_stats;
-}
+
 
 // function to check if all processors have finished their respective traces or not
 bool check_processors(processor_t* processors, unsigned int p){
@@ -181,7 +167,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
 
             // update relvant cachelines in processors
             bool sharing = false;
-            
+
             final_stats->communication_cost += p;
 
             for (unsigned long i = 0; i < p; i++){
@@ -197,8 +183,7 @@ csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
                                 other_cache[set * e + k].state = INVALID; 
                             }
                             other_cache[set * e + k].dirty = false;
-                            sharing = true; // check if this needed?
-                        
+                            sharing = true; // check if this needed?                        
                         }
                 }
             }
