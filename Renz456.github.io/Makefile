@@ -31,7 +31,7 @@ CFLAGS = -std=c99 $(COPT) -g -Wall -Wextra -Wpedantic -Wconversion
 CFLAGS += -Wstrict-prototypes -Wwrite-strings -Wno-unused-parameter -Werror
 
 HANDIN_TAR = cachelab-handin.tar
-FILES = directory_msi mesi_csim test-csim csim test-trans test-trans-simple tracegen-ct $(HANDIN_TAR)
+FILES = directory_mesi directory_msi mesi_csim test-csim csim test-trans test-trans-simple tracegen-ct $(HANDIN_TAR)
 
 all: $(FILES)
 .PHONY: all
@@ -43,6 +43,9 @@ mesi_csim: mesi_csim.o cachelab.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 directory_msi: directory_msi.o cachelab.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+directory_mesi: directory_mesi.o cachelab.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 test-csim: test-csim.o cachelab.o
@@ -70,6 +73,7 @@ trans.o: trans.c cachelab.h
 trans-san.o: trans.c cachelab.h
 mesi_csim.o: mesi_csim.c cachelab.h
 directory_msi.o: directory_msi.c cachelab.h
+directory_mesi.o: directory_mesi.c cachelab.h
 
 # Compile certain targets with sanitizers
 %-san.o: %.c
