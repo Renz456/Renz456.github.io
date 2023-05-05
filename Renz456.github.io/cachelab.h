@@ -21,8 +21,6 @@ typedef struct {
 } directory_t;
 
 
-
-
 typedef enum{
     MODIFY = 0,
     SHARED, 
@@ -31,7 +29,6 @@ typedef enum{
     STATE_LEN 
 }   state_t;
 
-// don't need this?
 typedef enum {
     VALID=0,
     ADDRESS,
@@ -103,6 +100,9 @@ typedef struct {
 
 /* intitialise csim stats */
 csim_stats_t* initStats(void);
+
+/* checks if all processors have finished running their traces */
+bool check_processors(processor_t* processors, unsigned int p);
 
 /** @brief Store a summary of the cache simulation statistics. */
 void printSummary(const csim_stats_t *stats);

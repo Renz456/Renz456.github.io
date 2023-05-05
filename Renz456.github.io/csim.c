@@ -4,6 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include "cachelab.h"
+#include "MSI.h"
+#include "MESI.h"
+
 
 // What does csim.c do?
 // csim.c simulates a cache by taking in commmands and outputs the
@@ -27,349 +30,13 @@
 // hit, intialize and evict to simulate a cache in memory
 
 
-// From write up
-// typedef struct {
-//     unsigned long hits;            /* number of hits */
-//     unsigned long cold_misses;          /* number of misses */
-//     unsigned long conflict_misses;
-//     unsigned long true_sharing_misses;
-//     unsigned long false_sharing_misses;
-//     unsigned long upgrades;
-
-//     unsigned long evictions;       /* number of evictions */
-//     unsigned long dirty_bytes;     /* number of dirty bytes in cache
-//        at end of simulation */
-//     unsigned long dirty_evictions; /* number of bytes evicted
-//    from dirty lines */
-// } csim_stats_t;
 
 
 
 
 
 
-cacheline_t* init_cache(unsigned long s, unsigned long e){
-    cacheline_t* cache = malloc(e * (0x1L << s) * sizeof(cacheline_t));
-    if (!cache) {
-        perror("cache array alloc failed!");
-        return NULL;
-    }
 
-    for (unsigned long i = 0; i < e * (0x1L << s); i++) {
-        cache[i].isValid = false;
-    }
-
-    return cache; 
-
-}
-
-// TODO helpers
-// void sendBusReq();
-
-// function to check if all processors have finished their respective traces or not
-bool check_processors(processor_t* processors, unsigned int p){
-    for (unsigned int i = 0; i < p; i++){
-        if (!processors[i].done) return false;
-    }
-
-    return true;
-}
-
-csim_stats_t* MultiCoreCacheSim(unsigned int p, unsigned long s,
-                        unsigned long e, unsigned long b, int v, processor_t* processors){
-    csim_stats_t* final_stats = initStats();
-    
-    queue_t* bus_queue = malloc(sizeof(queue_t));
-    
-    int global_clock = 0;
-    
-    while(!check_processors(processors, p)){
-
-        for (unsigned int j = 0; j < p; j++){
-            
-            char linebuff[100];
-            bool read = true;
-            
-            
-            if (!processors[j].done && fgets(linebuff, 38, processors[j].tfp)){
-                if (linebuff[0] == 'w' || linebuff[0] == 'S') read = false;
-                
-                char adress_string[64] = "";
-                int check = 5;               // Starting index of address in linebuff
-                
-                
-                while (linebuff[check] != ',') {
-
-                    strncat(adress_string, &linebuff[check], 1);
-                    check += 1;
-
-                }
-                const char *constant = adress_string;
-
-                // printf("%s check this\n", adress_string);
-                // checked to see if address was being parsed properly
-                unsigned long address = (unsigned long)strtol(constant, NULL, 16);
-
-                unsigned long mask1 = ~((~(unsigned long)0x0L) << s);
-                
-                unsigned long set = (address >> b) & mask1;
-                
-                
-
-                bool did_hit = false;
-
-                cacheline_t* cache = processors[j].cache;
-                // rest of the cache can behave like csim, maybe no need for flush?
-                
-                            
-                // bus upgrade bus req
-                for (unsigned long i = 0; i < e; i++) {
-                    if (cache[set * e + i].isValid &&
-                        cache[set * e + i].address >> b == address >> b) {
-                        if (cache[set * e + i].state == INVALID ||
-                            (cache[set * e + i].state == SHARED && !read)){
-
-                            node_t* request = malloc(sizeof(node_t));
-                            request->next = NULL;
-                            request->curr_req.address = address;
-                            request->curr_req.processor_id = j;
-                            if (read) request->curr_req.request = BUS_READ;
-                            else request->curr_req.request = BUS_READ_X;  
-                            push_bus_queue(bus_queue, request);
-                            // if (cache[set * e + i].address==address) final_stats->true_sharing_misses += 1;
-                            // else final_stats->false_sharing_misses+=1;
-                            // printf("push? %d\n", j);
-                            
-
-                        }
-                        else{
-                            final_stats->hits += 1;
-                        }
-                        did_hit = true;
-                        break;
-                    }
-                }
-                
-                // miss case bus req
-                if (!did_hit){  
-                    node_t* request = malloc(sizeof(node_t));
-                    request->next = NULL;
-                    request->curr_req.address = address;
-                    request->curr_req.processor_id = j;
-                    if (read) request->curr_req.request = BUS_READ;
-                    else request->curr_req.request = BUS_READ_X;  
-                    // printf("hello\n");
-                    push_bus_queue(bus_queue, request);
-                    // printf("push? 2 %d\n", j);
-                            
-                }
-                
-                
-                
-
-                    
-                
-
-
-            
-            } else processors[j].done = true;
-
-        }
-        
-        while(bus_queue->head != NULL){
-            node_t* current_request = pop_bus_queue(bus_queue);
-            
-            unsigned int processor = current_request->curr_req.processor_id;
-            unsigned long address = current_request->curr_req.address;
-            bus_request_t req_type = current_request->curr_req.request;
-            unsigned long mask1 = ~((~(unsigned long)0x0L) << s);    
-            unsigned long set = (address >> b) & mask1;
-
-            bool did_hit = false;
-            bool read = req_type == BUS_READ;
-
-            cacheline_t* cache = processors[processor].cache;
-
-            // update relvant cachelines in processors
-            final_stats->communication_cost += p;
-            // bool sharing = false;
-            for (unsigned long i = 0; i < p; i++){
-                if (i == processor) continue;
-                cacheline_t* other_cache = processors[i].cache;
-                // printf("check processor: %d, updates: %lu\n", processor, i);
-                                
-                for (unsigned long k = 0; k < e; k++){
-                    if (other_cache[set * e + k].isValid &&
-                        other_cache[set * e + k].address >> b == address>>b){
-                            if (read) {
-                                other_cache[set * e + k].state = SHARED; // consider flush case
-                            }
-                            else {
-                                other_cache[set * e + k].state = INVALID; 
-                            }
-                            other_cache[set * e + k].dirty = false;
-                            // sharing = true; // check if this needed?
-                        }
-                }
-            }
-
-            // in cache but upgrade required case
-            for (unsigned long i = 0; i < e; i++) {
-                if (cache[set * e + i].isValid &&
-                    cache[set * e + i].address >> b == address >> b) {
-                    if (cache[set * e + i].state == INVALID ){
-
-                        if (cache[set * e + i].address==address) final_stats->true_sharing_misses += 1;
-                        else final_stats->false_sharing_misses+=1;
-                        did_hit = true;
-                        if (read) {
-                            cache[set * e + i].state = SHARED;
-                        }
-                        else {
-                            cache[set * e + i].state = MODIFY;
-                            final_stats->dirty_bytes += 1;
-
-                        }
-                    }
-                    // Store case if line has a 0 dirtybit
-                    if (!read && cache[set * e + i].state == SHARED) {
-
-                        cache[set * e + i].dirty = true;
-                        final_stats->dirty_bytes += 1;
-                        final_stats->upgrades+=1;
-                        cache[set * e + i].state = MODIFY;
-
-                    
-                    }
-                    
-
-                    did_hit = true;
-                    cache[set * e + i].LRU_count = processors[processor].count;
-                    cache[set * e + i].address = address;
-                    break;
-                    // cache[set*e + i][3] = 1;   removed this as it's redundant
-                }
-            }
-            
-
-            //cold miss
-            if (!did_hit) {
-                for (unsigned long i = 0; i < e; i++) {
-                    // Initialise line if unitialized so no eviction needs to occur
-                    // yet
-                    if (!cache[set * e + i].isValid) {
-                        cache[set * e + i].address = address;
-                        if (!read) {
-                            final_stats->dirty_bytes += 1;
-                            cache[set * e + i].dirty = true;
-                            cache[set * e + i].state = MODIFY;
-                        } else{
-                            cache[set * e + i].dirty = false;
-                            cache[set * e + i].state = SHARED;
-                        }
-
-                        cache[set * e + i].LRU_count = processors[processor].count;
-                        final_stats->cold_misses += 1;
-                        cache[set * e + i].isValid = true;
-                        did_hit = true;
-                        i += e;
-                    }
-                }
-            }
-
-            // Eviction Case
-            if (!did_hit) {
-                // To check LRU line, find line w the lowest count
-                // Line with the lowest count was used last
-                unsigned long lo = 0xFFFFFFFFFFL;
-                unsigned long lo_ind = 0;
-                for (unsigned long i = 0; i < e; i++) {
-                    if (cache[set * e + i].LRU_count < lo) {
-                        lo = cache[set * e + i].LRU_count;
-                        lo_ind = set * e + i;
-                    }
-                }
-                // If dirtybit is 1 for the line being evicted or dirtybit is 1
-                // for the new line being stored, update stats accordingly
-                cache[lo_ind].address = address;
-                if (cache[lo_ind].dirty) {
-                    final_stats->dirty_bytes -= 1;
-                    final_stats->dirty_evictions += 1;
-                    cache[lo_ind].dirty = false;
-                }
-                if (!read) {
-                    cache[lo_ind].dirty = true;
-                    final_stats->dirty_bytes += 1;
-                    cache[lo_ind].state = MODIFY;
-                } else cache[lo_ind].state= SHARED;
-                cache[lo_ind].LRU_count = processors[processor].count;
-                final_stats->evictions += 1;
-                final_stats->conflict_misses += 1;
-            }
-
-            processors[processor].count += 1;
-
-            // pop_bus_queue(bus_queue);
-
-            free(current_request);
-
-        }
-        global_clock += 1;
-    }
-    
-    
-    
-    printf("global_clock %d\n", global_clock);
-    return final_stats;
-    
-}
-
-void printSummary(const csim_stats_t *stats);
-
-// taken from write up
-int process_trace_file(const char *trace) {
-    return true;
-    FILE *tfp = fopen(trace, "rt");
-    if (!tfp) {
-        printf("Error opening '%s'", trace);
-        return 1;
-    }
-    unsigned long LINELEN = 38;
-    // size of is 32hex long, +2 for opcode and space,
-    // +4 for comma and number of bytes;
-    char linebuf[LINELEN]; // How big should LINELEN be?
-    int parse_error = 0;
-
-    while (fgets(linebuf, 100, tfp)) {
-        // Parse the line of text in linebuf
-        // What do you do if the line is incorrect ?
-        // What do you do if the line is longer than
-        // LINELEN -1 chars?
-        if (strlen(linebuf) > LINELEN)
-            parse_error = 1; // instruction too big
-        if (linebuf[0] != 'L' && linebuf[0] != 'S') {
-            parse_error = 1; // invalid op
-        }
-        if (linebuf[1] != ' ') {
-            parse_error = 1;
-            // printf("error3\n");
-        }
-        unsigned int i = 2;
-        // printf("%s", linebuf);
-        while (i < strlen(linebuf)) {
-            if (linebuf[i] != ',' && i + 3 == strlen(linebuf)) {
-                // printf("error 1 %c\n", linebuf[i]);
-                parse_error = 1;
-            } else if (linebuf[i] == ',' && i + 3 != strlen(linebuf)) {
-                parse_error = 1;
-            }
-            i += 1;
-        }
-    }
-    fclose(tfp);
-    // Why do I return parse_error here and not 0?
-    return parse_error;
-}
 
 unsigned int find_arg_len(const char *trace) {
     FILE *tfp = fopen(trace, "rt");
@@ -432,11 +99,11 @@ int main(int argc, char **argv) {
     unsigned long s;
     unsigned long e;
     unsigned long b;
-    char *t;
+    char *m;
     int opt;
 
     // assign trace files here;
-    while ((opt = getopt(argc, argv, "fvs:E:b:t:")) != -1) {
+    while ((opt = getopt(argc, argv, "fvs:E:b:m:")) != -1) {
         switch (opt) {
         case 'f':
             return 0;
@@ -453,7 +120,7 @@ int main(int argc, char **argv) {
             b = (unsigned)atol(optarg);
             break;
         case 't':
-            t = optarg;
+            m = optarg;
             break;
         default:
             printf("wrong argument\n");
@@ -461,28 +128,26 @@ int main(int argc, char **argv) {
         }
     }
 
-    // if (s < 0 || s > 64) {
-    //     perror("invalid set size\n");
-    //     return -1;
-    // }
+    if (s < 0 || s > 64) {
+        perror("invalid set size\n");
+        return -1;
+    }
 
     if (e < 0) {
         perror("invalid byte offset\n");
         return -1;
     }
 
-    // if (b < 0 || b > 64) {
-    //     perror("invalid e size\n");
-    //     return -1;
-    // }
+    if (b < 0 || b > 64) {
+        perror("invalid e size\n");
+        return -1;
+    }
 
-    // if (b + s > 64) {
-    //     perror("something's wrong with input\n");
-    //     return -1;
-    // }
+    if (b + s > 64) {
+        perror("address must be 64 bits long\n");
+        return -1;
+    }
 
-    if (process_trace_file(t))
-        perror("invalid instruction\n");
     
     
 
@@ -496,9 +161,28 @@ int main(int argc, char **argv) {
     
     processor_t * processors = initialise_cpu(p, e, s, traces);
     
-    
-    csim_stats_t* final_stats = MultiCoreCacheSim(p, s, e, b, v, processors);
+    csim_stats_t* final_stats;
 
+    switch (m)
+    {
+        case "MSI":
+            final_stats = MultiCoreCacheSim_MSI(p, s, e, b, v, processors);
+            break;
+        
+        case "MESI":
+            final_stats = MultiCoreCacheSim_MESI(p, s, e, b, v, processors);
+            break;
+        case "directory_MSI":
+            final_stats = MultiCoreCacheSim_directory_MSI(p, s, e, b, v, processors);
+            break;
+        case "directory_MESI":
+            final_stats = MultiCoreCacheSim_directory_MESI(p, s, e, b, v, processors);
+            break;
+        default:
+            final_stats = MultiCoreCacheSim_MSI(p, s, e, b, v, processors);
+            break;    
+    }
+    
     
     final_stats->dirty_bytes = final_stats->dirty_bytes * (0x1L << b);
     final_stats->dirty_evictions = final_stats->dirty_evictions * (0x1L << b);

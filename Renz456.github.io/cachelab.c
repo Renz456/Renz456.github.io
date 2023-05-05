@@ -51,6 +51,16 @@ csim_stats_t* initStats(void) {
 }
 
 
+// function to check if all processors have finished their respective traces or not
+bool check_processors(processor_t* processors, unsigned int p){
+    for (unsigned int i = 0; i < p; i++){
+        if (!processors[i].done) return false;
+    }
+
+    return true;
+}
+
+
 /**
  * @brief Store a summary of the cache simulation statistics.
  *
