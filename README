@@ -1,0 +1,5 @@
+This is a simulator for a multicore cache. It is configurable with number of processors, 
+cache lines, block size, protocol and implementation. To run, first execute make and then run 
+the csim exececutable. It takes in the number of sets (-s), number lines (-E), bit offset (-b)
+and the protocol (-m). The number of processors can be configured within the csim file and 
+the traces must be updated accorindingly

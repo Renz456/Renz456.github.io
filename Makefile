@@ -30,13 +30,13 @@ COPT = -O1
 CFLAGS = -std=c99 $(COPT) -g -Wall -Wextra -Wpedantic -Wconversion
 CFLAGS += -Wstrict-prototypes -Wwrite-strings -Wno-unused-parameter -Werror
 
-HANDIN_TAR = cachelab-handin.tar
-FILES = csim cachelab $(HANDIN_TAR)
+# HANDIN_TAR = cachelab-handin.tar
+# FILES = directory_mesi directory_msi mesi_csim test-csim csim test-trans test-trans-simple tracegen-ct $(HANDIN_TAR)
 
 all: $(FILES)
 .PHONY: all
 
-csim: csim.o cachelab.o
+csim: csim.o cachelab.o directory_MESI.o MESI.o directory_MSI.o MSI.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # test-csim: test-csim.o cachelab.o
@@ -48,14 +48,14 @@ csim: csim.o cachelab.o
 # test-trans-simple: test-trans-simple.o trans-san.o cachelab-san.o
 # 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-# tracegen-ct: LDFLAGS += -pthread
-# tracegen-ct: trans-fin.o tracegen-ct.o cachelab.o
-# 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+tracegen-ct: LDFLAGS += -pthread
+tracegen-ct: trans-fin.o tracegen-ct.o cachelab.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Header file dependencies
 cachelab.o: cachelab.c cachelab.h
 cachelab-san.o: cachelab.c cachelab.h
-csim.o: csim.c cachelab.h
+csim.o: csim.c cachelab.h directory_MSI.h MSI.h directory_MESI.h MESI.h
 # test-csim.o: test-csim.c cachelab.h
 # test-trans.o: test-trans.c cachelab.h
 # test-trans-simple.o: test-trans-simple.c cachelab.h
@@ -102,8 +102,8 @@ clean:
 	-rm -f .csim_results .marker .format-checked
 
 # Include rules for submit, format, etc
-FORMAT_FILES = csim.c trans.c
-HANDIN_FILES = csim.c trans.c \
+FORMAT_FILES = csim.c 
+HANDIN_FILES = csim.c \
     .clang-format \
     traces/traces/tr1.trace \
     traces/traces/tr2.trace \
